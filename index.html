@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+
+<style type="text/css">
+body {
+  width: 800px;
+  height: 600px;
+  
+  display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+</style>
+
+<body>
+
+<div style="position: relative; width:800; margin: 0 auto ">
+	<img border="0" style="opacity:0.9" src="1.jpg" alt="bg" width="800" height="600">
+	
+	
+	
+	<div style="position: absolute; z-index:5000; top: 50px; left: 250px;">
+
+			<img border="0" src="logo.png" alt="Smiley" width="300" height="200">
+
+	</div>
+	
+		
+	<div style="position: absolute; z-index:5000; top: 350px; left: 295px;border: 1px solid #fff; border-radius: 19px; background-color: rgba(1,1,1,0.7);">
+		<a href="map_camera.html">
+			<img onmouseover="bigImg(this)" onmouseout="normalImg(this)"  border="0" src="start1.png" alt="Smiley" width="200" height="100">
+		</a>
+	</div>
+	
+	
+</div> 
+
+
+
+
+<script>
+function bigImg(x) {
+    
+	x.src = "start2.png";
+}
+
+function normalImg(x) {
+    
+	x.src = "start1.png";
+}
+</script>
+
+</body>
+</html>

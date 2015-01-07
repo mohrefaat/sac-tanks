@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SAC Map Tanks</title>
+    <script type="text/javascript" src="js/paper-full.js"></script>
+    <script type="text/javascript" src="js/phaser.js"></script>
+    <script type="text/javascript" src="js/game/bullet.js"></script>
+    <script type="text/javascript" src="js/game/tank.js"></script>
+    <script type="text/javascript" src="js/game/player.js"></script>
+    <script type="text/javascript" src="maps/map.js"></script>
+    <style>
+        canvas {
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="paperCanvas" width="800" height="600" style="margin:0 auto; display:none"></canvas>
+    <br />
+
+    <script type="text/javascript">
+        paper.install(window);
+        paper.setup('paperCanvas');
+
+        //Config (included from map.js)
+        //var worldWidth = 1000;
+        //var worldHeight = 600;
+        //var map = [0, 600,
+        //            0, 400,
+        //            350, 450,
+        //            375, 350,
+        //            1000, 400,
+        //            1000, 600];
+
+        var game = new Phaser.Game(800, 600, Phaser.AUTO, '', { preload: preload, create: create, update: update, render: render });
+
+        var explosionRadius = 35;
+        var explosionAccuracy = 20;
+        var currentPlayer = 0;
+
+        function preload() {
+            game.load.image('ground', 'images/ground.jpg');
+            game.load.spritesheet('dude', 'images/dude3.png', 32, 48);
+            game.load.spritesheet('dude2', 'images/dude4.png', 32, 48);
+            game.load.image('fuel', 'images/fuel.png');
+            game.load.image('booz', 'images/boooz2.png');
+            game.load.image('health', 'images/health.png');
+			game.load.image('health2', 'images/health2.png');
+            game.load.image('sand', 'images/sand.png');
+			
+			game.load.spritesheet('exp', 'images/exp.png', 32, 48);//--------explosion
+
+            game.load.spritesheet('explosion', 'images/explosion.png', 128, 128);
+            game.load.image('bullet', 'images/bullet.png');
+
+            game.load.audio('ThemeSound', ['Sounds/MI.mp3', 'Sounds/MI.ogg']);
+            game.load.audio('FireSound', ['Sounds/Tank_Firing.mp3']);
+            game.load.audio('BombSound', ['Sounds/Bomb.mp3']);
+
+        }
+
+        function create() {
+
+            var myBitmap = game.add.bitmapData(worldWidth, worldHeight);
+            var grd = myBitmap.context.createLinearGradient(0, 0, 0, 600);
+            grd.addColorStop(0, "#0a68b0");
+            grd.addColorStop(1, "white");
+            myBitmap.context.fillStyle = grd;
+            myBitmap.context.fillRect(0, 0, worldWidth, 580);
+            game.add.sprite(0, 0, myBitmap);
+
+            game.world.setBounds(0, 0, worldWidth, worldHeight);
+
+            game.physics.startSystem(Phaser.Physics.P2JS);
+            game.physics.p2.gravity.y = 800;
+            game.physics.p2.setImpactEvents(true);
+
+            groundMask = game.add.graphics(0, 0);
+            groundMask.beginFill(0xffffff);
+            groundMask.drawPolygon(map);
+            groundMask.endFill();
+
+            groundTile = game.add.tileSprite(0, 0, worldWidth * 2, worldHeight, 'ground');
+            groundTile.tileScale.setTo(0.3, 0.3);
+            groundTile.mask = groundMask;
+
+
+            game.physics.p2.enable(groundTile, false);
+            groundTile.body.static = true;
+            groundTile.body.clearShapes();
+            groundTile.body.addPolygon(null, map);
+
+
+            groundMaterial = game.physics.p2.createMaterial('groundMaterial', groundTile.body);
+            groundTile.body.setMaterial(groundMaterial);
+
+            bulletPool = game.add.group();
+
+            players = [
+                new Player("Player One", [
+                    new Tank(game, 'dude', 'booz', 1800, game.world.height - 400, 'fuel', 75, 6, 100, 0.5, 150, groundMaterial, 'health', 'health2', 0),
+                    new Tank(game, 'dude', 'booz', 1850, game.world.height - 400, 'fuel', 75, 6, 100, 0.5, 150, groundMaterial, 'health', 'health2', 0)
+                ]),
+
+                new Player("Player Two", [
+                    new Tank(game, 'dude2', 'booz', 200, game.world.height - 400, 'fuel', 75, 6, 100, 0.5, 150, groundMaterial, 'health', 'health2', 1),
+                    new Tank(game, 'dude2', 'booz', 150, game.world.height - 400, 'fuel', 75, 6, 100, 0.5, 150, groundMaterial, 'health', 'health2', 1)
+                ])];
+
+
+            groundCG = game.physics.p2.createCollisionGroup();
+            bulletsCG = game.physics.p2.createCollisionGroup();
+            groundTile.body.setCollisionGroup(groundCG);
+
+            for (var j = 0; j < players.length; j++)
+                for (var i = 0; i < players[j].tanksArray.length; i++) {
+                    players[j].tanksArray[i].Collides([groundCG, game.physics.p2.everythingCollisionGroup]);
+                    groundTile.body.collides(players[j].tanksArray[i].collisionGroup);
+                    players[j].tanksArray[i].OnTurnEnd = StartNextTurn;
+                }
+
+            groundTile.body.collides(bulletsCG);
+
+            players[currentPlayer].NextTank().turn = true;
+
+            musicBackSound = game.add.audio('ThemeSound', 1, true);
+            musicFireSound = game.add.audio('FireSound', 1, false);
+            musicBombSound = game.add.audio('BombSound', 1, false);
+            musicBackSound.play('', 0, 1, true);
+
+
+            winText = game.add.text(game.width / 2, game.height / 2, 'Win', { fontSize: '62px', fill: 'red' });
+            winText.anchor.setTo(0.5, 0.5);
+            winText.fixedToCamera = true;
+            winText.visible = false;
+
+            playerText = game.add.text(game.width - 35, 15, 'Player', { fontSize: 24, fill: 'red' });
+            playerText.anchor.setTo(1, 0);
+            playerText.fixedToCamera = true;
+
+            instructionsText = game.add.text(game.width / 2, game.height - 15, 'Instructions', { fontSize: 24, fill: 'white' });
+            instructionsText.anchor.setTo(0.5, 1);
+            instructionsText.fixedToCamera = true;
+            instructionsText.stroke = true;
+            instructionsText.strokeThickness = 5;
+			
+			leftBound = game.add.sprite(-50, worldHeight/2, "booz");
+			leftBound.anchor.setTo(0.5,0.5);
+			leftBound.scale.setTo(1,worldHeight);
+			
+			game.physics.p2.enable(leftBound, true);
+			
+			leftBound.body.static = true;
+			leftBound.body.setCollisionGroup(groundCG);
+			leftBound.body.collides(bulletsCG);
+			
+			rightBound = game.add.sprite(worldWidth+50, worldHeight/2, "booz");
+			rightBound.anchor.setTo(0.5,0.5);
+			rightBound.scale.setTo(1,worldHeight);
+			
+			game.physics.p2.enable(rightBound, true);
+			
+			rightBound.body.static = true;
+			rightBound.body.setCollisionGroup(groundCG);
+			rightBound.body.collides(bulletsCG)
+        }
+
+        function StartNextTurn() {
+            currentPlayer = (++currentPlayer >= players.length) ? 0 : currentPlayer;
+            if (players[currentPlayer].tanksArray.length == 0)
+                return;
+            players[currentPlayer].NextTank().turn = true;
+        }
+
+        function update() {
+
+            if (players[0].tanksArray.length == 0 || players[1].tanksArray.length == 0) {
+                winText.text = (players[0].tanksArray.length == 0 ? players[1].name : players[0].name) + " won !!";
+                winText.visible = true;
+                return;
+            }
+
+            //Update players
+            playerText.text = players[currentPlayer].name;
+            for (var j = 0; j < players.length; j++)
+                players[j].Update();
+
+            //Update bullets rotation
+            bulletPool.forEachAlive(function (bullet) {
+                bullet.body.rotation = Math.atan2(bullet.body.velocity.y, bullet.body.velocity.x);
+            }, this);
+
+        }
+
+        function render() {
+            //game.debug.cameraInfo(game.camera, 32, 32);
+        }
+
+        function ApplyExplosion(polygon, radius, explosionVertices, explosionCenter) {
+
+            var poly = new Path();
+
+            for (var i = 0; i < polygon.length; i += 2)
+                poly.add(new Point(polygon[i], polygon[i + 1]));
+
+            poly.closed = true;
+
+            var explosionPath = new Path();
+            var deltaTheta = 2 * Math.PI / explosionVertices;
+            var theta = 0;
+
+            for (var i = 0; i < explosionVertices; i++) {
+                var p = PolarToCartesian(radius, theta);
+
+                explosionPath.add(new Point(p.x, p.y));
+                theta += deltaTheta;
+            }
+            explosionPath.closed = true;
+            explosionPath.position.set(explosionCenter.x, explosionCenter.y);
+
+            var sub = poly.subtract(explosionPath);
+            //sub.reverse();
+
+            if (!sub || !sub.segments)
+                return polygon;
+
+            var resultPoly = [];
+
+            for (var i = 0; i < sub.segments.length; i++) {
+                resultPoly.push(sub.segments[i].point.x);
+                resultPoly.push(sub.segments[i].point.y);
+            }
+
+
+            poly.remove();
+            sub.remove();
+
+            return resultPoly;
+        }
+
+        function PolarToCartesian(r, theta) {
+            return { x: r * Math.cos(theta), y: r * Math.sin(theta) };
+        }
+
+        function UpdateGround() {
+            groundMask.clear();
+            groundMask.beginFill(0xffffff);
+            groundMask.drawPolygon(map);
+            groundMask.endFill();
+
+
+            groundTile.body.destroy();
+            groundTile.reset();
+            groundTile.tileScale.setTo(0.3, 0.3);
+            groundTile.mask = groundMask;
+
+            game.physics.p2.enable(groundTile, false);
+
+            groundTile.body.clearShapes();
+            groundTile.body.addPolygon(null, map);
+
+            groundTile.body.collideWorldBounds = false;
+            groundTile.body.static = true;
+
+            groundTile.body.setCollisionGroup(groundCG);
+
+            for (var j = 0; j < players.length; j++)
+                for (var i = 0; i < players[j].tanksArray.length; i++)
+                    groundTile.body.collides(players[j].tanksArray[i].collisionGroup);
+
+            groundTile.body.collides(bulletsCG);
+
+            groundTile.body.setMaterial(groundMaterial);
+        }
+    </script>
+</body>
+</html>
